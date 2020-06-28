@@ -6,8 +6,11 @@ import com.example.kino.model.movie.Movie
 import com.example.kino.model.movie.MovieStatus
 import com.example.kino.model.movie.SelectedMovie
 import com.example.kino.model.repository.MovieRepository
+import com.example.kino.utils.ApiResponse
 import com.example.kino.utils.constants.API_KEY
 import com.example.kino.utils.constants.MEDIA_TYPE
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -22,41 +25,69 @@ class MovieDetailsViewModel(
     val liveData = MutableLiveData<State>()
 
     fun getMovie(id: Int) {
-
-        launch {
-            val movie = withContext(Dispatchers.IO) {
-                try {
-                    val movieDetails = movieRepository.getRemoteMovie(
-                        id,
-                        API_KEY
-                    )
-                    val movieState = movieRepository.getRemoteMovieStates(
-                        id,
-                        API_KEY, sessionId
-                    )
-                    if (movieDetails != null) {
-                        if (movieState != null) {
-                            movieDetails.isClicked = movieState
+        movieRepository.getRemoteMovie(id, API_KEY)
+            ?.subscribeOn(Schedulers.io())
+            ?.observeOn(AndroidSchedulers.mainThread())
+            ?.subscribe(
+                { result ->
+                    when (result) {
+                        is ApiResponse.Success<Movie> -> {
+                            val movie = result.result
+                            setMovieState(movie)
+                            setGenres(movie)
+//                            movie.tagline?.let {
+//                                movie.runtime?.let { it1 ->
+//                                    movieRepository.updateLocalMovieProperties(
+//                                        it,
+//                                        it1,
+//                                        movie.id
+//                                    )
+//                                }
+//                            }
                         }
-                        setGenres(movieDetails)
-                        movieDetails.tagline?.let {
-                            movieDetails.runtime?.let { it1 ->
-                                movieRepository.updateLocalMovieProperties(
-                                    it,
-                                    it1, movieDetails.id
-                                )
-                            }
+                        is ApiResponse.Error -> {
+                            liveData.value = State.HideLoading
+//                            val movie = movieRepository.getLocalMovie(id)
+//                            liveData.value = State.HideLoading
+//                            liveData.value = State.Result(movie)
                         }
                     }
-                    return@withContext movieDetails
-
-                } catch (e: Exception) {
-                    movieRepository.getLocalMovie(id)
+                },
+                {
+                    liveData.value = State.HideLoading
+//                    val movie = movieRepository.getLocalMovie(id)
+//                    liveData.value = State.HideLoading
+//                    liveData.value = State.Result(movie)
                 }
+            )?.let {
+                disposable.add(
+                    it
+                )
             }
-            liveData.value = State.HideLoading
-            liveData.value = State.Result(movie)
-        }
+    }
+
+    private fun setMovieState(movie: Movie) {
+        movieRepository.getRemoteMovieStateRX(movie.id, API_KEY, sessionId)
+            ?.subscribeOn(Schedulers.io())
+            ?.observeOn(AndroidSchedulers.mainThread())
+            ?.subscribe(
+                { result ->
+                    when (result) {
+                        is ApiResponse.Success<MovieStatus> -> {
+                            movie.isClicked = result.result.selectedStatus
+                            liveData.value = State.HideLoading
+                            liveData.value = State.Result(movie)
+                        }
+                        is ApiResponse.Error -> {
+                            liveData.value = State.HideLoading
+                            liveData.value = State.Result(movie)
+                        }
+                    }
+                }, {
+                    liveData.value = State.HideLoading
+                    liveData.value = State.Result(movie)
+                }
+            )?.let { disposable.add(it) }
     }
 
     fun updateLikeStatus(item: Movie) {

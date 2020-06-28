@@ -5,16 +5,20 @@ import android.content.SharedPreferences
 import com.example.kino.R
 import com.example.kino.model.account.LoginValidationData
 import com.example.kino.model.account.Session
+import com.example.kino.model.account.Success
 import com.example.kino.model.account.Token
+import com.example.kino.utils.ApiResponse
 import com.example.kino.utils.PostApi
 import com.example.kino.utils.constants.DEFAULT_VALUE
 import com.example.kino.utils.constants.NULLABLE_VALUE
+import com.example.kino.utils.constants.RESPONSE_ERROR
+import io.reactivex.Single
 
 interface AccountRepository {
-    suspend fun getSessionId(apiKey: String, token: Token): String?
-    suspend fun createToken(apiKey: String): Token?
-    suspend fun validateWithLogin(apiKey: String, data: LoginValidationData): Boolean
-    suspend fun logOut(apiKey: String, context: Context): Boolean?
+    fun createSession(apiKey: String, token: Token): Single<ApiResponse<Session>>
+    fun createToken(apiKey: String): Single<ApiResponse<Token>>
+    fun validateWithLogin(apiKey: String, data: LoginValidationData): Single<ApiResponse<Token>>
+    fun logOut(apiKey: String, context: Context): Single<ApiResponse<Success>>
 
     fun getLocalUsername(context: Context): String
     fun getLocalPassword(context: Context): String
@@ -31,21 +35,48 @@ class AccountRepositoryImpl(
     private var service: PostApi,
     private var sharedPreferences: SharedPreferences
 ) : AccountRepository {
-    override suspend fun getSessionId(apiKey: String, token: Token): String? {
-        return service.createSession(apiKey, token).body()?.sessionId
+
+    override fun createSession(apiKey: String, token: Token): Single<ApiResponse<Session>> {
+        return service.createSession(apiKey, token).map { response ->
+            if (response.isSuccessful) {
+                val session = response.body() ?: Session(null)
+                ApiResponse.Success(session)
+            } else ApiResponse.Error<Session>(RESPONSE_ERROR)
+        }
     }
 
-    override suspend fun createToken(apiKey: String): Token? {
-        return service.createRequestToken(apiKey).body()
+    override fun createToken(apiKey: String): Single<ApiResponse<Token>> {
+        return service.createRequestToken(apiKey).map { response ->
+            if (response.isSuccessful) {
+                val token = response.body() ?: Token(null)
+                ApiResponse.Success(token)
+            } else {
+                ApiResponse.Error<Token>(RESPONSE_ERROR)
+            }
+        }
     }
 
-    override suspend fun validateWithLogin(apiKey: String, data: LoginValidationData): Boolean {
-        return service.validateWithLogin(apiKey, data).isSuccessful
+    override fun validateWithLogin(
+        apiKey: String,
+        data: LoginValidationData
+    ): Single<ApiResponse<Token>> {
+        return service.validateWithLogin(apiKey, data).map { response ->
+            if (response.isSuccessful) {
+                val token = response.body() ?: Token(null)
+                ApiResponse.Success(token)
+            } else ApiResponse.Error<Token>(RESPONSE_ERROR)
+        }
     }
 
-    override suspend fun logOut(apiKey: String, context: Context): Boolean? {
+    override fun logOut(apiKey: String, context: Context): Single<ApiResponse<Success>> {
         val session = Session(getLocalSessionId(context))
-        return service.deleteSession(apiKey, session).body()?.success
+        return service.deleteSession(apiKey, session).map { response ->
+            if (response.isSuccessful) {
+                ApiResponse.Success(response.body()!!)
+            } else {
+                ApiResponse.Error<Success>(RESPONSE_ERROR)
+            }
+        }
     }
 
     override fun getLocalPassword(context: Context): String {

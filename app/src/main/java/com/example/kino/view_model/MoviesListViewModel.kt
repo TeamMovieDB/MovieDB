@@ -136,7 +136,7 @@ class MoviesListViewModel(
     private fun saveLikeStatus(movie: Movie) {
         launch {
             try {
-                val movieStatus = movieRepository.getRemoteMovieStates(
+                val movieStatus = movieRepository.getRemoteMovieState(
                     movie.id,
                     API_KEY, sessionId
                 )

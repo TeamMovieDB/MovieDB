@@ -2,9 +2,12 @@ package com.example.kino.view_model
 
 import android.content.Context
 import androidx.lifecycle.MutableLiveData
+import com.example.kino.model.account.Success
 import com.example.kino.model.repository.AccountRepository
+import com.example.kino.utils.ApiResponse
 import com.example.kino.utils.constants.API_KEY
-import kotlinx.coroutines.launch
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
 
 class AccountViewModel(
     private val context: Context,
@@ -12,7 +15,7 @@ class AccountViewModel(
 ) : BaseViewModel() {
 
     val username = MutableLiveData<String>()
-    val liveData = MutableLiveData<AccountViewModel.State>()
+    val liveData = MutableLiveData<State>()
 
     init {
         getUsername()
@@ -23,21 +26,27 @@ class AccountViewModel(
     }
 
     fun logOut() {
-        launch {
-            try {
-                val logOutSuccessful = accountRepository.logOut(API_KEY, context)
-                if (logOutSuccessful != null) {
-                    if (logOutSuccessful) {
-                        deleteLogInData()
-                        liveData.value = State.LogOutSuccessful
-                    } else {
+        disposable.add(
+            accountRepository.logOut(API_KEY, context)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(
+                    { result ->
+                        when (result) {
+                            is ApiResponse.Success<Success> -> {
+                                if (result.result.success) {
+                                    deleteLogInData()
+                                    liveData.value = State.LogOutSuccessful
+                                }
+                            }
+                            is ApiResponse.Error -> liveData.value = State.LogOutFailed
+                        }
+                    },
+                    {
                         liveData.value = State.LogOutFailed
                     }
-                }
-            } catch (e: Exception) {
-                liveData.value = State.LogOutFailed
-            }
-        }
+                )
+        )
     }
 
     private fun deleteLogInData() {

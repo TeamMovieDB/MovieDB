@@ -9,8 +9,11 @@ import com.example.kino.model.movie.Genres
 import com.example.kino.model.movie.Movie
 import com.example.kino.model.movie.MovieStatus
 import com.example.kino.model.movie.SelectedMovie
+import com.example.kino.utils.ApiResponse
 import com.example.kino.utils.PostApi
 import com.example.kino.utils.constants.NULLABLE_VALUE
+import com.example.kino.utils.constants.RESPONSE_ERROR
+import io.reactivex.Single
 
 interface MovieRepository {
     fun getLocalMovies(): List<Movie>?
@@ -27,10 +30,18 @@ interface MovieRepository {
     fun getLocalSessionId(context: Context): String
 
     suspend fun getRemoteGenres(apiKey: String): Genres?
-    suspend fun getRemoteMovie(id: Int, apiKey: String): Movie?
+    fun getRemoteMovie(id: Int, apiKey: String): Single<ApiResponse<Movie>>?
     suspend fun getRemoteMovieList(apiKey: String, page: Int): List<Movie>?
     suspend fun getRemoteFavouriteMovies(apiKey: String, sessionId: String): List<Movie>?
-    suspend fun getRemoteMovieStates(movieId: Int, apiKey: String, sessionId: String): Boolean?
+
+    //delete and replace with RX
+    suspend fun getRemoteMovieState(movieId: Int, apiKey: String, sessionId: String): Boolean?
+    fun getRemoteMovieStateRX(
+        movieId: Int,
+        apiKey: String,
+        sessionId: String
+    ): Single<ApiResponse<MovieStatus>>?
+
     suspend fun updateRemoteFavourites(apiKey: String, sessionId: String, fav: SelectedMovie)
 }
 
@@ -85,15 +96,42 @@ class MovieRepositoryImpl(
         return service?.getGenres(apiKey)?.body()
     }
 
-    override suspend fun getRemoteMovie(id: Int, apiKey: String): Movie? {
-        return service?.getMovieById(id, apiKey)?.body()
+    override fun getRemoteMovie(id: Int, apiKey: String): Single<ApiResponse<Movie>>? {
+        return service?.getMovieById(id, apiKey)
+            ?.map { response ->
+                if (response.isSuccessful) {
+                    val movie = response.body() ?: Movie()
+                    ApiResponse.Success(movie)
+                } else {
+                    ApiResponse.Error<Movie>(RESPONSE_ERROR)
+                }
+            }
+    }
+
+    override fun getRemoteMovieStateRX(
+        movieId: Int,
+        apiKey: String,
+        sessionId: String
+    ): Single<ApiResponse<MovieStatus>>? {
+        return service?.getMovieStatesRX(movieId, apiKey, sessionId)
+            ?.map { response ->
+                if (response.isSuccessful) {
+                    val status = response.body()!!
+                    ApiResponse.Success(status)
+                } else {
+                    ApiResponse.Error<MovieStatus>(RESPONSE_ERROR)
+                }
+            }
     }
 
     override suspend fun getRemoteMovieList(apiKey: String, page: Int): List<Movie>? {
         return service?.getMovieList(apiKey, page)?.body()?.movieList
     }
 
-    override suspend fun getRemoteFavouriteMovies(apiKey: String, sessionId: String): List<Movie>? {
+    override suspend fun getRemoteFavouriteMovies(
+        apiKey: String,
+        sessionId: String
+    ): List<Movie>? {
         return service?.getFavouriteMovies(apiKey, sessionId)?.body()?.movieList
     }
 
@@ -105,13 +143,14 @@ class MovieRepositoryImpl(
         service?.addRemoveFavourites(apiKey, sessionId, fav)
     }
 
-    override suspend fun getRemoteMovieStates(
+    override suspend fun getRemoteMovieState(
         movieId: Int,
         apiKey: String,
         sessionId: String
     ): Boolean? {
         return service?.getMovieStates(movieId, apiKey, sessionId)?.body()?.selectedStatus
     }
+
 
     override fun getLocalSessionId(context: Context): String {
         return if (sharedPreferences.contains(context.getString(R.string.session_id))) {

@@ -3,10 +3,13 @@ package com.example.kino.view_model
 import android.content.Context
 import androidx.lifecycle.MutableLiveData
 import com.example.kino.model.account.LoginValidationData
+import com.example.kino.model.account.Session
 import com.example.kino.model.account.Token
 import com.example.kino.model.repository.AccountRepository
+import com.example.kino.utils.ApiResponse
 import com.example.kino.utils.constants.API_KEY
-import kotlinx.coroutines.launch
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
 
 class SignInViewModel(
     private val context: Context,
@@ -25,65 +28,99 @@ class SignInViewModel(
     }
 
     fun createTokenRequest(receivedUsername: String, receivedPassword: String) {
-        launch {
-            liveData.value = State.ShowLoading
-            try {
-                token = accountRepository.createToken(API_KEY)
-                username = receivedUsername
-                password = receivedPassword
+        liveData.value = State.ShowLoading
 
-                if (token != null) {
-                    loginValidationData = LoginValidationData(
-                        username,
-                        password,
-                        token!!.token
-                    )
-                    validateWithLogin()
-                } else {
-                    liveData.value = State.FailedLoading
-                    liveData.value = State.HideLoading
-                }
+        disposable.add(
+            accountRepository.createToken(API_KEY)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(
+                    { result ->
+                        when (result) {
+                            is ApiResponse.Success<Token> -> {
+                                token = result.result
+                                username = receivedUsername
+                                password = receivedPassword
 
-            } catch (e: Exception) {
-                liveData.value = State.FailedLoading
-                liveData.value = State.HideLoading
-            }
-        }
+                                if (token?.token != null) {
+                                    loginValidationData = LoginValidationData(
+                                        username,
+                                        password,
+                                        token!!.token!!
+                                    )
+                                    validateWithLogin()
+                                }
+                            }
+
+                            is ApiResponse.Error -> {
+                                liveData.value = State.FailedLoading
+                                liveData.value = State.HideLoading
+                            }
+                        }
+                    },
+                    {
+                        liveData.value = State.FailedLoading
+                        liveData.value = State.HideLoading
+                    }
+
+                )
+        )
     }
 
     private fun validateWithLogin() {
-        launch {
-            try {
-                val response = accountRepository.validateWithLogin(API_KEY, loginValidationData)
-                if (response) {
-                    createSession()
-                } else {
-                    liveData.value = State.WrongDataProvided
-                    liveData.value = State.HideLoading
-                }
-            } catch (e: Exception) {
-                liveData.value = State.WrongDataProvided
-                liveData.value = State.HideLoading
-            }
-        }
+        disposable.add(
+            accountRepository.validateWithLogin(API_KEY, loginValidationData)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(
+                    { result ->
+                        when (result) {
+                            is ApiResponse.Success<Token> -> {
+                                createSession()
+                            }
+                            is ApiResponse.Error -> {
+                                liveData.value = State.WrongDataProvided
+                                liveData.value = State.HideLoading
+                            }
+                        }
+                    },
+                    {
+                        liveData.value = State.WrongDataProvided
+                        liveData.value = State.HideLoading
+                    }
+
+                )
+        )
     }
 
     private fun createSession() {
-        launch {
-            liveData.value = State.ShowLoading
-            try {
-                sessionId =
-                    token?.let { accountRepository.getSessionId(API_KEY, it).toString() }
-                        .toString()
-                saveLoginData()
-                liveData.value = State.HideLoading
-                liveData.value = State.Result
+        liveData.value = State.ShowLoading
+        token?.let {
+            accountRepository.createSession(API_KEY, it)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(
+                    { result ->
+                        when (result) {
+                            is ApiResponse.Success<Session> -> {
+                                sessionId = result.result.sessionId.toString()
+                                saveLoginData()
+                                liveData.value = State.HideLoading
+                                liveData.value = State.Result
+                            }
+                            is ApiResponse.Error -> {
+                                liveData.value = State.FailedLoading
+                                liveData.value = State.HideLoading
+                            }
+                        }
+                    },
+                    {
+                        liveData.value = State.FailedLoading
+                        liveData.value = State.HideLoading
+                    }
 
-            } catch (e: Exception) {
-                liveData.value = State.FailedLoading
-                liveData.value = State.HideLoading
-            }
-        }
+                )
+        }?.let { disposable.add(it) }
     }
 
     private fun saveLoginData() {
