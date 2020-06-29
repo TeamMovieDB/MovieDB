@@ -11,9 +11,6 @@ import com.example.kino.utils.constants.API_KEY
 import com.example.kino.utils.constants.MEDIA_TYPE
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.schedulers.Schedulers
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.*
 
 class MovieDetailsViewModel(
@@ -92,20 +89,35 @@ class MovieDetailsViewModel(
 
     fun updateLikeStatus(item: Movie) {
         val movie = SelectedMovie(MEDIA_TYPE, item.id, item.isClicked)
-        launch {
-            withContext(Dispatchers.IO) {
-                try {
-                    movieRepository.updateRemoteFavourites(API_KEY, sessionId, movie)
-                    movieRepository.updateLocalMovieIsCLicked(movie.selectedStatus, movie.movieId)
 
-                } catch (e: Exception) {
-                    movieRepository.updateLocalMovieIsCLicked(item.isClicked, item.id)
-                    movieRepository.insertLocalMovieStatus(
-                        MovieStatus(movie.movieId, movie.selectedStatus)
-                    )
+        //      movieRepository.updateLocalMovieIsCLicked(movie.selectedStatus, movie.movieId)
+
+        movieRepository.updateRemoteFavouritesRX(API_KEY, sessionId, movie)
+            ?.subscribeOn(Schedulers.io())
+            ?.observeOn(AndroidSchedulers.mainThread())
+            ?.subscribe(
+                { result ->
+                    when (result) {
+                        is ApiResponse.Error -> {
+//                            movieRepository.updateLocalMovieIsCLicked(item.isClicked, item.id)
+//                            movieRepository.insertLocalMovieStatus(
+//                                MovieStatus(movie.movieId, movie.selectedStatus)
+//                            )
+                        }
+                    }
+                },
+                {
+//                    movieRepository.updateLocalMovieIsCLicked(item.isClicked, item.id)
+//                    movieRepository.insertLocalMovieStatus(
+//                        MovieStatus(movie.movieId, movie.selectedStatus)
+//                    )
                 }
+
+            )?.let {
+                disposable.add(
+                    it
+                )
             }
-        }
     }
 
     private fun setGenres(movie: Movie) {

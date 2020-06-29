@@ -42,7 +42,14 @@ interface MovieRepository {
         sessionId: String
     ): Single<ApiResponse<MovieStatus>>?
 
+    //delete and replace with RX
     suspend fun updateRemoteFavourites(apiKey: String, sessionId: String, fav: SelectedMovie)
+    fun updateRemoteFavouritesRX(
+        apiKey: String,
+        sessionId: String,
+        fav: SelectedMovie
+    ): Single<ApiResponse<Boolean>>?
+
 }
 
 class MovieRepositoryImpl(
@@ -135,12 +142,28 @@ class MovieRepositoryImpl(
         return service?.getFavouriteMovies(apiKey, sessionId)?.body()?.movieList
     }
 
+    //replace with rx
     override suspend fun updateRemoteFavourites(
         apiKey: String,
         sessionId: String,
         fav: SelectedMovie
     ) {
         service?.addRemoveFavourites(apiKey, sessionId, fav)
+    }
+
+    override fun updateRemoteFavouritesRX(
+        apiKey: String,
+        sessionId: String,
+        fav: SelectedMovie
+    ): Single<ApiResponse<Boolean>>? {
+        return service?.addRemoveFavouritesRX(apiKey, sessionId, fav)
+            ?.map { response ->
+                if (response.isSuccessful) {
+                    ApiResponse.Success(true)
+                } else {
+                    ApiResponse.Error<Boolean>(RESPONSE_ERROR)
+                }
+            }
     }
 
     override suspend fun getRemoteMovieState(
