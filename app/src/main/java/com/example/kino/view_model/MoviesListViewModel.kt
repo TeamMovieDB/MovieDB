@@ -2,6 +2,7 @@ package com.example.kino.view_model
 
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.MutableLiveData
 import com.example.kino.R
 import com.example.kino.model.movie.GenresList
@@ -9,9 +10,12 @@ import com.example.kino.model.movie.Movie
 import com.example.kino.model.movie.MovieStatus
 import com.example.kino.model.movie.SelectedMovie
 import com.example.kino.model.repository.MovieRepository
+import com.example.kino.utils.ApiResponse
 import com.example.kino.utils.FragmentEnum
 import com.example.kino.utils.constants.API_KEY
 import com.example.kino.utils.constants.MEDIA_TYPE
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,7 +51,6 @@ class MoviesListViewModel(
                 }
             }
             liveData.value = State.HideLoading
-            liveData.value = State.Result(moviesList, isLocal)
         }
     }
 
@@ -62,41 +65,85 @@ class MoviesListViewModel(
     }
 
     private var isLocal = false
-    private suspend fun getTopMovies(page: Int): List<Movie>? {
-        return try {
-            val movies = movieRepository.getRemoteMovieList(API_KEY, page)
-            if (!movies.isNullOrEmpty()) {
-                isLocal = false
-                for (movie in movies) {
-                    setMovieGenres(movie)
-                    saveLikeStatus(movie)
+    private fun getTopMovies(page: Int) {
+        movieRepository.getRemoteMovieList(API_KEY, page)?.subscribeOn(Schedulers.io())
+            ?.observeOn(AndroidSchedulers.mainThread())?.subscribe({ result ->
+                if (result is ApiResponse.Success<List<Movie>>) {
+                    val movies = result.result
+                    if (!movies.isNullOrEmpty()) {
+                        isLocal = false
+                        for (movie in movies) {
+                            setMovieGenres(movie)
+                            saveLikeStatus(movie)
+                        }
+//                        if(page == 1){
+//                            //TODO: Do by RXJava way
+//                            movieRepository.deleteLocalMovies()
+//                            movieRepository.insertLocalMovies(movies)
+//                        }
+                    }
+                    liveData.value = State.Result(movies, isLocal)
+                    liveData.value = State.HideLoading
                 }
-                if (page == 1) {
-                    movieRepository.deleteLocalMovies()
-                    movieRepository.insertLocalMovies(movies)
-                }
+            }, {
+                isLocal = true
+                movieRepository.getLocalMovies()
+                liveData.value = State.HideLoading
+            })?.let {
+                disposable.add(
+                    it
+                )
             }
-            movies
-        } catch (e: Exception) {
-            isLocal = true
-            movieRepository.getLocalMovies()
-        }
+//        return try {
+//            val movies = movieRepository.getRemoteMovieList(API_KEY, page)
+//            if (!movies.isNullOrEmpty()) {
+//                isLocal = false
+//                for (movie in movies) {
+//                    setMovieGenres(movie)
+//                    saveLikeStatus(movie)
+//                }
+//                if (page == 1) {
+//                    movieRepository.deleteLocalMovies()
+//                    movieRepository.insertLocalMovies(movies)
+//                }
+//            }
+//            movies
+//        } catch (e: Exception) {
+//            isLocal = true
+//            movieRepository.getLocalMovies()
+//        }
     }
 
-    private suspend fun getFavouriteMovies(): List<Movie>? {
-        return try {
-            val movies = movieRepository.getRemoteFavouriteMovies(API_KEY, sessionId)
-
-            if (!movies.isNullOrEmpty()) {
-                for (movie in movies) {
-                    setMovieGenres(movie)
-                    movie.isClicked = true
+    private fun getFavouriteMovies() {
+        movieRepository.getRemoteFavouriteMovies(API_KEY, sessionId)?.subscribeOn(Schedulers.io())
+            ?.observeOn(AndroidSchedulers.mainThread())?.subscribe({ result ->
+                if (result is ApiResponse.Success<List<Movie>>) {
+                    val favouriteList = result.result
+                    if (!favouriteList.isNullOrEmpty()) {
+                        for (movie in favouriteList) {
+                            setMovieGenres(movie)
+                            movie.isClicked = true
+                        }
+                    }
+                    liveData.value = State.Result(favouriteList, isLocal)
+                    liveData.value = State.HideLoading
                 }
-            }
-            movies
-        } catch (e: Exception) {
-            movieRepository.getLocalFavouriteMovies()
-        }
+            }, {
+                liveData.value = State.HideLoading
+            })?.let { disposable.add(it) }
+//        return try {
+//            val movies = movieRepository.getRemoteFavouriteMovies(API_KEY, sessionId)
+//
+//            if (!movies.isNullOrEmpty()) {
+//                for (movie in movies) {
+//                    setMovieGenres(movie)
+//                    movie.isClicked = true
+//                }
+//            }
+//            movies
+//        } catch (e: Exception) {
+//            movieRepository.getLocalFavouriteMovies()
+//        }
     }
 
     private fun setMovieGenres(movie: Movie) {
@@ -116,40 +163,65 @@ class MoviesListViewModel(
     }
 
     private fun updateLikeStatus(movie: SelectedMovie) {
-        launch {
-            withContext(Dispatchers.IO) {
-                try {
-                    movieRepository.updateRemoteFavourites(API_KEY, sessionId, movie)
-                    movieRepository.updateLocalMovieIsCLicked(movie.selectedStatus, movie.movieId)
-
-                } catch (e: Exception) {
-                    movieRepository.updateLocalMovieIsCLicked(movie.selectedStatus, movie.movieId)
-                    movieRepository.insertLocalMovieStatus(
-                        MovieStatus(movie.movieId, movie.selectedStatus)
-                    )
-                    Log.d("testt", movieRepository.getLocalMovieStatuses().toString())
-                }
+        movieRepository.updateRemoteFavouritesRX(API_KEY, sessionId, movie)
+            ?.subscribeOn(Schedulers.io())
+            ?.observeOn(AndroidSchedulers.mainThread())
+            ?.subscribe({}, {})?.let {
+                disposable.add(
+                    it
+                )
             }
-        }
+//        launch {
+//            withContext(Dispatchers.IO) {
+//                try {
+//                    movieRepository.updateRemoteFavouritesRX(API_KEY, sessionId, movie)
+//                    movieRepository.updateLocalMovieIsCLicked(movie.selectedStatus, movie.movieId)
+//
+//                } catch (e: Exception) {
+//                    movieRepository.updateLocalMovieIsCLicked(movie.selectedStatus, movie.movieId)
+//                    movieRepository.insertLocalMovieStatus(
+//                        MovieStatus(movie.movieId, movie.selectedStatus)
+//                    )
+//                    Log.d("testt", movieRepository.getLocalMovieStatuses().toString())
+//                }
+//            }
+//        }
     }
 
     private fun saveLikeStatus(movie: Movie) {
-        launch {
-            try {
-                val movieStatus = movieRepository.getRemoteMovieState(
-                    movie.id,
-                    API_KEY, sessionId
-                )
-                if (movieStatus != null) {
+        movieRepository.getRemoteMovieStateRX(movie.id, API_KEY, sessionId)
+            ?.subscribeOn(Schedulers.io())
+            ?.observeOn(AndroidSchedulers.mainThread())
+            ?.subscribe({ result ->
+                if (result is ApiResponse.Success<MovieStatus>) {
+                    val movieStatus = result.result.selectedStatus
                     movie.isClicked = movieStatus
-                    withContext(Dispatchers.IO) {
-                        movieRepository.updateLocalMovieIsCLicked(movie.isClicked, movie.id)
-                    }
                     liveData.value = State.Update
                 }
-            } catch (e: Exception) {
+            }, {
+
+            })?.let {
+                disposable.add(
+                    it
+                )
             }
-        }
+
+//        launch {
+//            try {
+//                val movieStatus = movieRepository.getRemoteMovieState(
+//                    movie.id,
+//                    API_KEY, sessionId
+//                )
+//                if (movieStatus != null) {
+//                    movie.isClicked = movieStatus
+//                    withContext(Dispatchers.IO) {
+//                        movieRepository.updateLocalMovieIsCLicked(movie.isClicked, movie.id)
+//                    }
+//                    liveData.value = State.Update
+//                }
+//            } catch (e: Exception) {
+//            }
+//        }
     }
 
     sealed class State {

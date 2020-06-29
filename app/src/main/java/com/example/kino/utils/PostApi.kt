@@ -12,10 +12,10 @@ import retrofit2.http.*
 interface PostApi {
 
     @GET("movie/top_rated")
-    suspend fun getMovieList(
+    fun getMovieList(
         @Query("api_key") apiKey: String,
         @Query("page") page: Int
-    ): Response<Movies>
+    ): Single<Response<Movies>>
 
     @GET("movie/{id}")
     fun getMovieById(
@@ -24,10 +24,10 @@ interface PostApi {
     ): Single<Response<Movie>>
 
     @GET("account/{account_id}/favorite/movies")
-    suspend fun getFavouriteMovies(
+    fun getFavouriteMovies(
         @Query("api_key") apiKey: String,
         @Query("session_id") sessionId: String
-    ): Response<Movies>
+    ): Single<Response<Movies>>
 
     //replace with RX
     @POST("account/{account_id}/favorite")

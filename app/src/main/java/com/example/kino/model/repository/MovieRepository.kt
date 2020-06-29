@@ -13,6 +13,7 @@ import com.example.kino.utils.ApiResponse
 import com.example.kino.utils.PostApi
 import com.example.kino.utils.constants.NULLABLE_VALUE
 import com.example.kino.utils.constants.RESPONSE_ERROR
+import com.google.android.gms.common.api.Api
 import io.reactivex.Single
 
 interface MovieRepository {
@@ -31,11 +32,10 @@ interface MovieRepository {
 
     suspend fun getRemoteGenres(apiKey: String): Genres?
     fun getRemoteMovie(id: Int, apiKey: String): Single<ApiResponse<Movie>>?
-    suspend fun getRemoteMovieList(apiKey: String, page: Int): List<Movie>?
-    suspend fun getRemoteFavouriteMovies(apiKey: String, sessionId: String): List<Movie>?
+    fun getRemoteMovieList(apiKey: String, page: Int): Single<ApiResponse<List<Movie>>>?
+    fun getRemoteFavouriteMovies(apiKey: String, sessionId: String): Single<ApiResponse<List<Movie>>>?
 
     //delete and replace with RX
-    suspend fun getRemoteMovieState(movieId: Int, apiKey: String, sessionId: String): Boolean?
     fun getRemoteMovieStateRX(
         movieId: Int,
         apiKey: String,
@@ -43,7 +43,6 @@ interface MovieRepository {
     ): Single<ApiResponse<MovieStatus>>?
 
     //delete and replace with RX
-    suspend fun updateRemoteFavourites(apiKey: String, sessionId: String, fav: SelectedMovie)
     fun updateRemoteFavouritesRX(
         apiKey: String,
         sessionId: String,
@@ -131,24 +130,30 @@ class MovieRepositoryImpl(
             }
     }
 
-    override suspend fun getRemoteMovieList(apiKey: String, page: Int): List<Movie>? {
-        return service?.getMovieList(apiKey, page)?.body()?.movieList
+    override fun getRemoteMovieList(apiKey: String, page: Int): Single<ApiResponse<List<Movie>>>? {
+        return service?.getMovieList(apiKey, page)?.map { response ->
+            if (response.isSuccessful) {
+                val list = response.body()?.movieList ?: emptyList()
+                ApiResponse.Success<List<Movie>>(list)
+            } else {
+                ApiResponse.Error<List<Movie>>("Response error")
+            }
+        }
     }
 
-    override suspend fun getRemoteFavouriteMovies(
+    override fun getRemoteFavouriteMovies(
         apiKey: String,
         sessionId: String
-    ): List<Movie>? {
-        return service?.getFavouriteMovies(apiKey, sessionId)?.body()?.movieList
-    }
-
-    //replace with rx
-    override suspend fun updateRemoteFavourites(
-        apiKey: String,
-        sessionId: String,
-        fav: SelectedMovie
-    ) {
-        service?.addRemoveFavourites(apiKey, sessionId, fav)
+    ): Single<ApiResponse<List<Movie>>>? {
+        return service?.getFavouriteMovies(apiKey, sessionId)?.map {response->
+            if(response.isSuccessful){
+                val list = response.body()?.movieList?: emptyList()
+                ApiResponse.Success<List<Movie>>(list)
+            }
+            else{
+                ApiResponse.Error<List<Movie>>("Reponse error")
+            }
+        }
     }
 
     override fun updateRemoteFavouritesRX(
@@ -164,14 +169,6 @@ class MovieRepositoryImpl(
                     ApiResponse.Error<Boolean>(RESPONSE_ERROR)
                 }
             }
-    }
-
-    override suspend fun getRemoteMovieState(
-        movieId: Int,
-        apiKey: String,
-        sessionId: String
-    ): Boolean? {
-        return service?.getMovieStates(movieId, apiKey, sessionId)?.body()?.selectedStatus
     }
 
 
