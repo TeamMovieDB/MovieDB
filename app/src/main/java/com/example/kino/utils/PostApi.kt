@@ -29,28 +29,12 @@ interface PostApi {
         @Query("session_id") sessionId: String
     ): Single<Response<Movies>>
 
-    //replace with RX
-    @POST("account/{account_id}/favorite")
-    suspend fun addRemoveFavourites(
-        @Query("api_key") apiKey: String,
-        @Query("session_id") sessionId: String,
-        @Body fav: SelectedMovie
-    ): Response<StatusResponse>
-
     @POST("account/{account_id}/favorite")
     fun addRemoveFavouritesRX(
         @Query("api_key") apiKey: String,
         @Query("session_id") sessionId: String,
         @Body fav: SelectedMovie
     ): Single<Response<StatusResponse>>
-
-    //replace with RX
-    @GET("movie/{movie_id}/account_states")
-    suspend fun getMovieStates(
-        @Path("movie_id") movieId: Int,
-        @Query("api_key") apiKey: String,
-        @Query("session_id") sessionId: String
-    ): Response<MovieStatus>
 
     @GET("movie/{movie_id}/account_states")
     fun getMovieStatesRX(

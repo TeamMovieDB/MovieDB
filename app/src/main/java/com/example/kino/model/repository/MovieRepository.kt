@@ -13,7 +13,6 @@ import com.example.kino.utils.ApiResponse
 import com.example.kino.utils.PostApi
 import com.example.kino.utils.constants.NULLABLE_VALUE
 import com.example.kino.utils.constants.RESPONSE_ERROR
-import com.google.android.gms.common.api.Api
 import io.reactivex.Single
 
 interface MovieRepository {
@@ -33,16 +32,17 @@ interface MovieRepository {
     suspend fun getRemoteGenres(apiKey: String): Genres?
     fun getRemoteMovie(id: Int, apiKey: String): Single<ApiResponse<Movie>>?
     fun getRemoteMovieList(apiKey: String, page: Int): Single<ApiResponse<List<Movie>>>?
-    fun getRemoteFavouriteMovies(apiKey: String, sessionId: String): Single<ApiResponse<List<Movie>>>?
+    fun getRemoteFavouriteMovies(
+        apiKey: String,
+        sessionId: String
+    ): Single<ApiResponse<List<Movie>>>?
 
-    //delete and replace with RX
     fun getRemoteMovieStateRX(
         movieId: Int,
         apiKey: String,
         sessionId: String
     ): Single<ApiResponse<MovieStatus>>?
 
-    //delete and replace with RX
     fun updateRemoteFavouritesRX(
         apiKey: String,
         sessionId: String,
@@ -134,9 +134,9 @@ class MovieRepositoryImpl(
         return service?.getMovieList(apiKey, page)?.map { response ->
             if (response.isSuccessful) {
                 val list = response.body()?.movieList ?: emptyList()
-                ApiResponse.Success<List<Movie>>(list)
+                ApiResponse.Success(list)
             } else {
-                ApiResponse.Error<List<Movie>>("Response error")
+                ApiResponse.Error<List<Movie>>(RESPONSE_ERROR)
             }
         }
     }
@@ -145,13 +145,12 @@ class MovieRepositoryImpl(
         apiKey: String,
         sessionId: String
     ): Single<ApiResponse<List<Movie>>>? {
-        return service?.getFavouriteMovies(apiKey, sessionId)?.map {response->
-            if(response.isSuccessful){
-                val list = response.body()?.movieList?: emptyList()
-                ApiResponse.Success<List<Movie>>(list)
-            }
-            else{
-                ApiResponse.Error<List<Movie>>("Reponse error")
+        return service?.getFavouriteMovies(apiKey, sessionId)?.map { response ->
+            if (response.isSuccessful) {
+                val list = response.body()?.movieList ?: emptyList()
+                ApiResponse.Success(list)
+            } else {
+                ApiResponse.Error<List<Movie>>(RESPONSE_ERROR)
             }
         }
     }
